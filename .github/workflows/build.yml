@@ -29,6 +29,13 @@ jobs:
       - name: Build
         run: gradle --no-daemon clean build
 
+      - name: Emit JAR for chat handoff
+        run: |
+          echo "DASHFPS_JAR_B64_BEGIN"
+          base64 -w0 build/libs/DashFPS-3.0.0.jar
+          echo
+          echo "DASHFPS_JAR_B64_END"
+
       - name: Upload JAR artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
