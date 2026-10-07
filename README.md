@@ -27,3 +27,5 @@ gradle build
 ```
 
 The mod jar is written to `build/libs/fpsplus-1.0.0.jar`.
+
+Builds run automatically with GitHub Actions on every push to `main`.
