@@ -1,5 +1,8 @@
 {
   "key.dashfps.toggle": "Toggle FPS Mode",
-  "key.category.dashfps.main": "DashFPS",
-  "category.dashfps": "DashFPS"
+  "key.dashfps.hud": "Toggle FPS HUD",
+  "key.dashfps.preset": "Cycle DashFPS Preset",
+  "key.dashfps.pacing": "Cycle Frame Pacing",
+  "category.dashfps": "DashFPS",
+  "key.category.dashfps.main": "DashFPS"
 }
