@@ -30,6 +30,7 @@ jobs:
         run: gradle --no-daemon clean build
 
       - name: Upload JAR artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: DashFPS-3.0.0
