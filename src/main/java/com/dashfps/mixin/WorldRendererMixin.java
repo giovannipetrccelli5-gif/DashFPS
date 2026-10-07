@@ -1,6 +1,7 @@
 package com.dashfps.mixin;
 
 import com.dashfps.CullingUtil;
+import com.dashfps.DashFPS;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
@@ -30,6 +31,10 @@ public abstract class WorldRendererMixin {
         require = 0
     )
     private void dashfps$filterChunksOutsideFov(CallbackInfoReturnable<?> cir) {
+        if (!DashFPS.isWorldFovCullingActive()) {
+            return;
+        }
+
         ObjectArrayList<SectionRenderDispatcher.RenderSection> backup =
             new ObjectArrayList<>(this.visibleSections);
         this.dashfps$sectionBackups.push(backup);
