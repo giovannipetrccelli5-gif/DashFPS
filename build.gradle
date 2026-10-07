@@ -10,7 +10,9 @@ base {
     archivesName = project.archives_base_name
 }
 
-repositories {}
+repositories {
+    mavenCentral()
+}
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -26,7 +28,8 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 25
+    options.release = 25
+    options.encoding = 'UTF-8'
 }
 
 java {
