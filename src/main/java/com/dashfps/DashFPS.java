@@ -226,7 +226,7 @@ public final class DashFPS implements ClientModInitializer {
 
     private static void showActionBar(Minecraft minecraft, String message) {
         if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(Component.literal(message), true);
+            minecraft.gui.setOverlayMessage(Component.literal(message), false);
         }
     }
 
