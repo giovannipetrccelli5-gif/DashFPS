@@ -1,19 +1,16 @@
 package com.dashfps;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.minecraft.client.CloudStatus;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Options;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ParticleStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,226 +19,153 @@ public final class DashFPS implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
-        Identifier.fromNamespaceAndPath(MOD_ID, "main")
+            Identifier.fromNamespaceAndPath(MOD_ID, "main")
     );
 
     private static DashFPSConfig config;
-    private static KeyMapping toggleFpsMode;
-
-    private static boolean fpsSettingsApplied;
-    private static boolean startupStateHandled;
-    private static int dynamicTickCounter;
-    private static int highFpsSamples;
-
-    private static CloudStatus previousCloudStatus = CloudStatus.FANCY;
-    private static ParticleStatus previousParticleStatus = ParticleStatus.ALL;
-    private static boolean previousEntityShadows = true;
-    private static int previousRenderDistance = 12;
+    private static DashFPSManager manager;
+    private static KeyMapping fpsModeKey;
+    private static KeyMapping hudKey;
+    private static KeyMapping presetKey;
+    private static KeyMapping pacingKey;
 
     @Override
     public void onInitializeClient() {
         config = DashFPSConfig.load();
+        ModDetector.scan();
+        manager = new DashFPSManager(config);
 
-        toggleFpsMode = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.dashfps.toggle",
-            InputConstants.KEY_F8,
-            CATEGORY
-        ));
+        fpsModeKey = key("key.dashfps.toggle", InputConstants.KEY_F8);
+        hudKey = key("key.dashfps.hud", InputConstants.KEY_F9);
+        presetKey = key("key.dashfps.preset", InputConstants.KEY_F10);
+        pacingKey = key("key.dashfps.pacing", InputConstants.KEY_F11);
 
-        ClientTickEvents.END_CLIENT_TICK.register(DashFPS::onClientTick);
+        FpsHud.register(manager);
+        ClientTickEvents.END_CLIENT_TICK.register(client -> CrashGuard.run("client_tick", () -> clientTick(client)));
         registerCommands();
 
-        LOGGER.info("DashFPS initialized. Config: {}", DashFPSConfig.path());
-    }
-
-    private static void onClientTick(Minecraft minecraft) {
-        if (minecraft.options == null) {
-            return;
-        }
-
-        while (toggleFpsMode.consumeClick()) {
-            setFpsMode(minecraft, !config.fpsModeOn, true);
-        }
-
-        if (minecraft.player != null && !startupStateHandled) {
-            startupStateHandled = true;
-            if (config.fpsModeOn) {
-                applyFpsSettings(minecraft);
-            }
-        }
-
-        if (minecraft.player == null) {
-            startupStateHandled = false;
-            dynamicTickCounter = 0;
-            highFpsSamples = 0;
-            return;
-        }
-
-        // Keep runtime state synchronized after config reload/reset.
-        if (config.fpsModeOn && !fpsSettingsApplied) {
-            applyFpsSettings(minecraft);
-        } else if (!config.fpsModeOn && fpsSettingsApplied) {
-            restoreFpsSettings(minecraft);
-        }
-
-        if (!config.dynamicRenderDistance) {
-            dynamicTickCounter = 0;
-            highFpsSamples = 0;
-            return;
-        }
-
-        dynamicTickCounter++;
-        if (dynamicTickCounter < 100) {
-            return;
-        }
-        dynamicTickCounter = 0;
-
-        int fps = minecraft.getFps();
-        int current = minecraft.options.renderDistance().get();
-
-        if (fps < config.minFps) {
-            highFpsSamples = 0;
-            int next = Math.max(4, current - 2);
-            if (next != current) {
-                setDynamicRenderDistance(minecraft, next, fps);
-            }
-        } else if (fps > config.maxFps) {
-            highFpsSamples++;
-            // Samples are 5 seconds apart; two samples means ~10 seconds above target.
-            if (highFpsSamples >= 2) {
-                highFpsSamples = 0;
-                int next = Math.min(config.maxViewDistance, current + 2);
-                if (next != current) {
-                    setDynamicRenderDistance(minecraft, next, fps);
-                }
-            }
-        } else {
-            highFpsSamples = 0;
+        LOGGER.info("DashFPS initialized. Detected optimization mods: {}", ModDetector.names());
+        LOGGER.info("DashFPS config: {}", DashFPSConfig.path());
+        if (config.chunkTickReduction || config.entityTickReduction) {
+            CrashGuard.log("tick_reduction", "Requested tick-reduction flags are not applied: Lithium/Sodium touch the relevant world tick classes, so DashFPS skips them to honor its no-conflict rule", null);
         }
     }
 
-    private static void setDynamicRenderDistance(Minecraft minecraft, int chunks, int fps) {
-        minecraft.options.renderDistance().set(chunks);
-        minecraft.options.save();
-        showActionBar(minecraft, "DashFPS: render distance " + chunks + " (" + fps + " FPS)");
+    private static KeyMapping key(String translation, int keyCode) {
+        return KeyMappingHelper.registerKeyMapping(new KeyMapping(translation, keyCode, CATEGORY));
+    }
+
+    private static void clientTick(Minecraft minecraft) {
+        while (fpsModeKey.consumeClick()) manager.toggleFpsMode(minecraft);
+        while (hudKey.consumeClick()) {
+            config.hudEnabled = !config.hudEnabled;
+            config.save();
+            DashFPSManager.actionBar(minecraft, "DashFPS HUD " + (config.hudEnabled ? "ON" : "OFF"));
+        }
+        while (presetKey.consumeClick()) manager.cyclePreset(minecraft);
+        while (pacingKey.consumeClick()) manager.cyclePacing(minecraft);
+
+        if (minecraft.player != null) {
+            if (config.fpsModeOn) manager.setFpsMode(minecraft, true);
+            manager.applyFirstLaunchMobileIfNeeded(minecraft);
+        }
+        manager.tick(minecraft);
     }
 
     private static void registerCommands() {
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, commandBuildContext) -> {
-            dispatcher.register(ClientCommands.literal("dashfps")
-                .then(ClientCommands.literal("renderdistance")
-                    .then(ClientCommands.argument("distance", IntegerArgumentType.integer(2, 500))
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
+                ClientCommands.literal("dashfps")
                         .executes(context -> {
-                            int distance = IntegerArgumentType.getInteger(context, "distance");
-                            Minecraft minecraft = Minecraft.getInstance();
-                            config.maxViewDistance = Math.max(4, distance);
-                            config.save();
-                            minecraft.options.renderDistance().set(distance);
-                            minecraft.options.save();
-                            context.getSource().sendFeedback(
-                                Component.literal("DashFPS render distance set to " + distance +
-                                    "; dynamic maximum is now " + config.maxViewDistance)
-                            );
+                            context.getSource().sendFeedback(Component.literal(
+                                    "DashFPS | FPS mode=" + config.fpsModeOn + " | HUD=" + config.hudEnabled
+                                            + " | preset=" + config.currentPreset + " | pacing=" + config.pacingMode));
                             return 1;
                         })
-                    )
-                )
-                .then(ClientCommands.literal("config")
-                    .then(ClientCommands.literal("reload")
-                        .executes(context -> {
-                            config = DashFPSConfig.load();
-                            context.getSource().sendFeedback(
-                                Component.literal("DashFPS config reloaded from " + DashFPSConfig.path())
-                            );
+                        .then(ClientCommands.literal("mods").executes(context -> {
+                            context.getSource().sendFeedback(Component.literal("Detected: " + ModDetector.names()));
+                            context.getSource().sendFeedback(Component.literal(ModDetector.delegationSummary()));
+                            context.getSource().sendFeedback(Component.literal(
+                                    "Tick reduction: intentionally skipped because Lithium/Sodium touch the required tick/world classes."));
+                            if (!CrashGuard.disabledFeatures().isEmpty()) {
+                                context.getSource().sendFeedback(Component.literal("CrashGuard disabled: " + String.join(", ", CrashGuard.disabledFeatures())));
+                            }
                             return 1;
-                        })
-                    )
-                    .then(ClientCommands.literal("reset")
-                        .executes(context -> {
-                            config = DashFPSConfig.reset();
-                            context.getSource().sendFeedback(
-                                Component.literal("DashFPS config reset to defaults.")
-                            );
-                            return 1;
-                        })
-                    )
-                )
-            );
-        });
+                        }))
+                        .then(ClientCommands.literal("preset")
+                                .then(ClientCommands.argument("name", StringArgumentType.word()).executes(context -> {
+                                    String name = StringArgumentType.getString(context, "name");
+                                    try {
+                                        manager.applyPreset(Minecraft.getInstance(), DashFPSManager.Preset.parse(name), true);
+                                        return 1;
+                                    } catch (IllegalArgumentException ex) {
+                                        context.getSource().sendError(Component.literal("Use: potato, performance, balanced, quality, or max"));
+                                        return 0;
+                                    }
+                                })))
+                        .then(ClientCommands.literal("hud")
+                                .then(ClientCommands.literal("position")
+                                        .then(ClientCommands.argument("corner", StringArgumentType.word()).executes(context -> {
+                                            String corner = StringArgumentType.getString(context, "corner").toLowerCase();
+                                            if (!corner.equals("top_left") && !corner.equals("top_right")
+                                                    && !corner.equals("bottom_left") && !corner.equals("bottom_right")) {
+                                                context.getSource().sendError(Component.literal("Use: top_left, top_right, bottom_left, bottom_right"));
+                                                return 0;
+                                            }
+                                            config.hudPosition = corner;
+                                            config.save();
+                                            context.getSource().sendFeedback(Component.literal("DashFPS HUD position: " + corner));
+                                            return 1;
+                                        })))
+                                .then(ClientCommands.literal("toggle").executes(context -> {
+                                    config.hudEnabled = !config.hudEnabled;
+                                    config.save();
+                                    context.getSource().sendFeedback(Component.literal("DashFPS HUD " + (config.hudEnabled ? "enabled" : "disabled")));
+                                    return 1;
+                                })))
+                        .then(ClientCommands.literal("pacing")
+                                .then(ClientCommands.argument("mode", StringArgumentType.word()).executes(context -> {
+                                    String value = StringArgumentType.getString(context, "mode");
+                                    try {
+                                        manager.setPacing(Minecraft.getInstance(), DashFPSManager.Pacing.parse(value), true);
+                                        return 1;
+                                    } catch (IllegalArgumentException ex) {
+                                        context.getSource().sendError(Component.literal("Use: off, smooth, or max"));
+                                        return 0;
+                                    }
+                                })))
+                        .then(ClientCommands.literal("mobile")
+                                .then(ClientCommands.literal("optimize").executes(context -> {
+                                    manager.applyMobileOptimize(Minecraft.getInstance(), true);
+                                    return 1;
+                                })))
+                        .then(ClientCommands.literal("config")
+                                .then(ClientCommands.literal("save").executes(context -> {
+                                    config.save();
+                                    context.getSource().sendFeedback(Component.literal("Saved " + DashFPSConfig.path()));
+                                    return 1;
+                                }))
+                                .then(ClientCommands.literal("reload").executes(context -> {
+                                    Minecraft minecraft = Minecraft.getInstance();
+                                    manager.forceRestore(minecraft);
+                                    config = DashFPSConfig.load();
+                                    manager.setConfig(config);
+                                    if (config.fpsModeOn) manager.setFpsMode(minecraft, true);
+                                    context.getSource().sendFeedback(Component.literal("Reloaded " + DashFPSConfig.path()));
+                                    return 1;
+                                }))
+                                .then(ClientCommands.literal("reset").executes(context -> {
+                                    Minecraft minecraft = Minecraft.getInstance();
+                                    manager.forceRestore(minecraft);
+                                    config = DashFPSConfig.reset();
+                                    manager.setConfig(config);
+                                    context.getSource().sendFeedback(Component.literal("DashFPS config reset"));
+                                    return 1;
+                                })))
+        ));
     }
 
-    private static void setFpsMode(Minecraft minecraft, boolean enabled, boolean showMessage) {
-        config.fpsModeOn = enabled;
-        config.save();
-
-        if (enabled) {
-            applyFpsSettings(minecraft);
-        } else {
-            restoreFpsSettings(minecraft);
-        }
-
-        if (showMessage) {
-            showActionBar(minecraft, enabled ? "DashFPS: FPS Mode ON" : "DashFPS: FPS Mode OFF");
-        }
-    }
-
-    private static void applyFpsSettings(Minecraft minecraft) {
-        if (fpsSettingsApplied) {
-            return;
-        }
-
-        Options options = minecraft.options;
-        previousCloudStatus = options.cloudStatus().get();
-        previousParticleStatus = options.particles().get();
-        previousEntityShadows = options.entityShadows().get();
-        previousRenderDistance = options.renderDistance().get();
-
-        config.maxViewDistance = Math.max(config.maxViewDistance, previousRenderDistance);
-        config.save();
-
-        options.cloudStatus().set(CloudStatus.OFF);
-        options.particles().set(ParticleStatus.MINIMAL);
-        options.entityShadows().set(false);
-        options.renderDistance().set(Math.min(8, config.maxViewDistance));
-        options.save();
-
-        fpsSettingsApplied = true;
-    }
-
-    private static void restoreFpsSettings(Minecraft minecraft) {
-        if (!fpsSettingsApplied) {
-            return;
-        }
-
-        Options options = minecraft.options;
-        options.cloudStatus().set(previousCloudStatus);
-        options.particles().set(previousParticleStatus);
-        options.entityShadows().set(previousEntityShadows);
-        options.renderDistance().set(Math.min(500, previousRenderDistance));
-        options.save();
-
-        fpsSettingsApplied = false;
-        highFpsSamples = 0;
-    }
-
-    private static void showActionBar(Minecraft minecraft, String message) {
-        if (minecraft.player != null) {
-            minecraft.gui.hud.setOverlayMessage(Component.literal(message), false);
-        }
-    }
-
-    public static DashFPSConfig getConfig() {
-        if (config == null) {
-            config = DashFPSConfig.load();
-        }
+    public static DashFPSConfig config() {
+        if (config == null) config = DashFPSConfig.load();
         return config;
-    }
-
-    public static boolean isAggressiveCullingActive() {
-        return getConfig().fpsModeOn;
-    }
-
-    public static boolean isWorldFovCullingActive() {
-        return getConfig().fpsModeOn && getConfig().dynamicRenderDistance;
     }
 }
