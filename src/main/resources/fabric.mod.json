@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "fpsplus",
+  "version": "${version}",
+  "name": "FPS Plus",
+  "description": "Raises the render distance cap to 500 and adds a simple FPS mode toggle.",
+  "authors": ["giovannipetrccelli5-gif"],
+  "contact": {
+    "sources": "https://github.com/giovannipetrccelli5-gif/DashFPS"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.example.fpsplus.FPSPlus"
+    ]
+  },
+  "mixins": [
+    "fpsplus.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
