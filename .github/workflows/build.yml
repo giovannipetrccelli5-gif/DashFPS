@@ -26,9 +26,14 @@ jobs:
       - name: Build
         run: gradle --no-daemon build
 
+      - name: Show built files
+        run: ls -lah build/libs
+
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
           name: fpsplus-jar
-          path: build/libs/fpsplus-1.0.0.jar
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
           if-no-files-found: error
