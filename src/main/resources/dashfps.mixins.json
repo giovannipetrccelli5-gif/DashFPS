@@ -3,13 +3,7 @@
   "package": "com.dashfps.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "OptionsMixin",
-    "EntityRendererMixin",
-    "BlockEntityRendererMixin",
-    "ItemFrameRendererMixin",
-    "BeaconRendererMixin",
-    "ParticleEngineMixin",
-    "WorldRendererMixin"
+    "SoundEngineMixin"
   ],
   "injectors": {
     "defaultRequire": 0
