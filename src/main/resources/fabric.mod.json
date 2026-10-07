@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "fpsplus",
+  "id": "dashfps",
   "version": "${version}",
-  "name": "FPS Plus",
-  "description": "Raises the render distance cap to 500 and adds a simple FPS mode toggle.",
+  "name": "DashFPS",
+  "description": "Client-side FPS optimization, dynamic render distance, and aggressive culling for Minecraft 26.3.",
   "authors": ["giovannipetrccelli5-gif"],
   "contact": {
     "sources": "https://github.com/giovannipetrccelli5-gif/DashFPS"
@@ -12,11 +12,14 @@
   "environment": "client",
   "entrypoints": {
     "client": [
-      "com.example.fpsplus.FPSPlus"
+      "com.dashfps.DashFPS"
     ]
   },
   "mixins": [
-    "fpsplus.mixins.json"
+    {
+      "config": "dashfps.mixins.json",
+      "environment": "client"
+    }
   ],
   "depends": {
     "fabricloader": ">=0.19.5",
