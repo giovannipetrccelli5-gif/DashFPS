@@ -2,6 +2,9 @@
 
 DashFPS is a client-side Fabric performance orchestrator for Minecraft Java 26.3. It is designed to run beside Sodium, Lithium, FerriteCore, Entity Culling, MoreCulling, ImmediatelyFast, Krypton, C2ME, ScalableLux, ModernFix, and BadOptimizations instead of reimplementing their optimization domains.
 
+> 🎮 **Play DashSMP!** Join the Java + Bedrock survival community at **`dashsmp.xyz`**. Explore custom economy, Crystal PvP, crates, shards, teams, and more. [Join Discord](https://discord.gg/WYSs5KEazR) · [Explore the server](DASHSMP_SERVER.md). DashFPS is optional; it is not required to join.
+
+
 ## Version baseline
 
 - Minecraft Java: 26.3 (Wilderness Bound)
